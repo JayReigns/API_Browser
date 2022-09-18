@@ -2,8 +2,8 @@
 bl_info = {
     "name": "API Browser",
     "author": "JayReigns",
-    "version": (1, 2, 0),
-    "blender": (2, 80, 0),
+    "version": (1, 2, 2),
+    "blender": (2, 81, 0),
     "location": "Text Editor > ToolBar > API Browser",
     "description": "Browse through the python api via the user interface",
     "category": "Development"
@@ -20,6 +20,38 @@ try: # if bpy.app.version < (3, 3, 0):
     from console.complete_import import get_root_modules
 except: #else:
     from bl_console_utils.autocomplete.complete_import import get_root_modules
+
+
+
+def resolve_module(path):
+    try:
+        module = path.split('.', 1)[0]
+        return eval(path, {module: __import__(module)})
+    except:
+        return None
+
+def resolve_path(cur_path, info):
+
+    def parent(path):
+        """Returns the parent path"""
+        return path.rpartition('[' if path.endswith(']') else '.')[0]
+
+    type, value = ( int(i) for i in info.split() )
+        
+    if type == -1:
+        cur_path = parent(cur_path)
+    elif type == -2:
+        cur_path = DEFAULT_MODULE
+    elif type == 0: # index
+        cur_path += f"['{API_Manager.filtered_tree[type][value]}']"
+    elif type == 1: # key
+        cur_path += f"[{value}]"
+    else:
+        if cur_path:
+            cur_path += '.'
+        cur_path += API_Manager.filtered_tree[type][value]
+
+    return cur_path
 
 
 class API_Manager:
@@ -71,13 +103,6 @@ class API_Manager:
 
     def _update_path():
 
-        def resolve_module(path):
-            try:
-                module = path.split('.', 1)[0]
-                return eval(path, {module: __import__(module)})
-            except:
-                return None
-        
         def categorize_module(module):
 
             def isiterable(mod):
@@ -137,32 +162,31 @@ class API_OT_GOTO_Module(bpy.types.Operator):
     bl_label = "Go To Module"
     
     info : bpy.props.StringProperty(name='Info', default='')
+
+    @classmethod
+    def description(cls, context, properties):
+        api_prop = context.window_manager.api_props
+        type, value = ( int(i) for i in properties.info.split() )
+
+        if type == -1:
+            return "Go to Parent Module"
+        elif type == -2:
+            return "Go to 'bpy' Module"
+        
+        module = resolve_module(resolve_path(api_prop.path, properties.info))
+        desc = str(module)
+        doc = str(module.__doc__)
+        if doc != 'None':
+            doc = doc.rstrip()
+            if doc.endswith("."): doc = doc[:-1]    # blender adds an '.' after
+            desc += '\n\n' + doc
+        return desc
     
     def execute(self, context):
 
-        def parent(path):
-            """Returns the parent path"""
-            return path.rpartition('[' if path.endswith(']') else '.')[0]
-
-        
         api_prop = context.window_manager.api_props
-
         api_prop.filter = ''
-        
-        type, value = ( int(i) for i in self.info.split() )
-        
-        if type == -1:
-            api_prop.path = parent(api_prop.path)
-        elif type == -2:
-            api_prop.path = DEFAULT_MODULE
-        elif type == 0: # index
-            api_prop.path += f"['{API_Manager.filtered_tree[type][value]}']"
-        elif type == 1: # key
-            api_prop.path += f"[{value}]"
-        else:
-            if api_prop.path:
-                api_prop.path += '.'
-            api_prop.path += API_Manager.filtered_tree[type][value]
+        api_prop.path = resolve_path(api_prop.path, self.info)
         
         return {'FINISHED'}
 
@@ -291,7 +315,7 @@ class API_PT_Browser(bpy.types.Panel):
 #########################################################################################
 
 
-from bpy.props import StringProperty, IntProperty, BoolProperty, PointerProperty
+from bpy.props import StringProperty, BoolProperty, PointerProperty
 
 class API_Props(bpy.types.PropertyGroup):
     
