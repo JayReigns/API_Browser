@@ -2,149 +2,180 @@
 bl_info = {
     "name": "API Browser",
     "author": "JayReigns",
-    "version": (1, 0, 0),
+    "version": (1, 2, 0),
     "blender": (2, 8, 0),
-    "location": "Text Editor > ToolBar > Text Panel",
+    "location": "Text Editor > ToolBar > API Browser",
     "description": "Browse through the python api via the user interface",
     "category": "Development"
 }
 
-import bpy
-from console.complete_import import get_root_modules
-
 DEFAULT_MODULE = 'bpy'
-API_INFO = None
-API_PROPS = None
 
 ICONS = ["TRIA_DOWN", "TRIA_DOWN", "PACKAGE", "WORDWRAP_ON", "DOT", "QUESTION", "SCRIPT", "INFO", "ERROR"]
 LABELS = ["Items", "Values", "Modules", "Types", "Properties", "Structs and Functions", "Methods and Functions", "Attributes", "Inaccessible"]
 
 
-def isiterable(mod):
-    try: return not isinstance(mod, str) and iter(mod) # (str, byte) can be passed but bpy.app gets ignored
-    except: return False
-
-def get_current_module(path):
-    try:
-        module = path.split('.', 1)[0]
-        return None if not module else eval(path, {module: __import__(module)})
-    except:
-        return None
-
-def get_data_tree():
-    
-    if not API_INFO.current_path:
-        return [[], [], get_root_modules(), [], [], [], [], [], []]
-    
-    itm, val, mod, typ, props, struct, met, att, bug = [], [], [], [], [], [], [], [], []
-    
-    current_module = API_INFO.current_module
-    
-    if isiterable(current_module):
-        if hasattr(current_module, 'keys'):
-            itm = [str(k) for k in list(current_module.keys())]
-        
-        if not itm:
-            val = [str(v) for v in list(current_module)]
-    
-    for i in dir(current_module):
-        try :
-            t = str(type(eval(f'module.{i}', {'module': current_module})))
-        except :
-            bug += [i]
-            continue
-
-        if t == "<class 'module'>":
-            mod += [i]
-        elif t.startswith("<class 'bpy_prop"):
-            props += [i]
-        elif t.startswith("<class 'bpy"):
-            struct += [i]
-        elif t == "<class 'builtin_function_or_method'>":
-            met += [i]
-        elif t == "<class 'type'>":
-            typ += [i]
-        else :
-            att += [i]
-    
-    return [itm, val, mod, typ, props, struct, met, att, bug]
-  
-
-def parent(path):
-    """Returns the parent path"""
-    return '' if not path else path.rpartition('[' if path.endswith(']') else '.')[0]
+import bpy
+try: # if bpy.app.version < (3, 3, 0):
+    from console.complete_import import get_root_modules
+except: #else:
+    from bl_console_utils.autocomplete.complete_import import get_root_modules
 
 
-class API_Info:
-    current_path   = None
-    current_filter = None
-    data_tree      = None
-    filtered_tree  = None
+class API_Manager:
+
+    # used internally
+    _data_tree       = None
+
+    # used to check for changes
+    _current_path    = None
+    _current_filter  = None
+    _filter_internal = None
+
+    # public
+    filtered_tree    = None
+    current_module   = None
+
+
+    def update(forced=False):
+        api_prop = bpy.context.window_manager.api_props
+
+        if forced or API_Manager._current_path != api_prop.path:
+            API_Manager._update_path()
+
+        elif API_Manager._current_filter != api_prop.filter or API_Manager._filter_internal != api_prop.filter_internal:
+            API_Manager._update_filter()
     
-    filter_internal = False
-    is_filtered     = False
+
+    def _update_filter():
+        api_prop = bpy.context.window_manager.api_props
+
+        tree = API_Manager._data_tree
+        filter_text = api_prop.filter.lower()
+        filter_internal = api_prop.filter_internal
+
+        if filter_text and filter_internal:
+            tree = [ [ mod for mod in cat if not mod.startswith('_') and filter_text in mod.lower() ] for cat in tree ]
+
+        elif filter_internal:
+            tree = [ [ mod for mod in cat if not mod.startswith('_') ] for cat in tree ]
+
+        elif filter_text:
+            tree = [ [ mod for mod in cat if filter_text in mod.lower() ] for cat in tree ]
+        
+
+        API_Manager._current_filter = filter_text
+        API_Manager._filter_internal = filter_internal
+        API_Manager.filtered_tree = tree
     
-    current_module  = None
-    
-    
-    def update(self):
+
+    def _update_path():
+
+        def resolve_module(path):
+            try:
+                module = path.split('.', 1)[0]
+                return eval(path, {module: __import__(module)})
+            except:
+                return None
         
-        filter = False
-        
-        if API_PROPS.path != self.current_path:
-            self.current_path = API_PROPS.path
-            self.current_module = get_current_module(self.current_path)
-            self.data_tree = get_data_tree()
-            filter = True
-        
-        if API_PROPS.filter_internal != self.filter_internal:
-            self.filter_internal = API_PROPS.filter_internal
-            filter = True
-        
-        if API_PROPS.filter != self.current_filter:
-            self.current_filter = API_PROPS.filter
-            filter = True
-        
-        if filter:
-            filter_text = self.current_filter.lower()
-            if filter_text and self.filter_internal:
-                self.filtered_tree = [ [ mod for mod in cat if not mod.startswith('_') and filter_text in mod.lower() ] for cat in self.data_tree ]
-            elif self.filter_internal:
-                self.filtered_tree = [ [ mod for mod in cat if not mod.startswith('_') ] for cat in self.data_tree ]
-            elif filter_text:
-                self.filtered_tree = [ [ mod for mod in cat if filter_text in mod.lower() ] for cat in self.data_tree ]
+        def categorize_module(module):
+
+            def isiterable(mod):
+                try: return not isinstance(mod, str) and iter(mod) # (str, byte) can be passed but bpy.app gets ignored
+                except: return False
             
-    def get_data(self):
-        return self.filtered_tree if self.filter_internal or self.current_filter else self.data_tree
+            itm, val, mod, typ, props, struct, met, att, bug = [], [], [], [], [], [], [], [], []
+            
+            if isiterable(module):
+                if hasattr(module, 'keys'):
+                    itm = [str(k) for k in list(module.keys())]
+                
+                if not itm:
+                    val = [str(v) for v in list(module)]
+            
+            for i in dir(module):
+                try :
+                    t = str(type(eval(f'module.{i}', {'module': module})))
+                except :
+                    bug += [i]
+                    continue
+
+                if t == "<class 'module'>":
+                    mod += [i]
+                elif t.startswith("<class 'bpy_prop"):
+                    props += [i]
+                elif t.startswith("<class 'bpy"):
+                    struct += [i]
+                elif t == "<class 'builtin_function_or_method'>":
+                    met += [i]
+                elif t == "<class 'type'>":
+                    typ += [i]
+                else :
+                    att += [i]
+            
+            return [itm, val, mod, typ, props, struct, met, att, bug]
+
+
+        path = bpy.context.window_manager.api_props.path
+        module = resolve_module(path)
+
+        if path:
+            tree = categorize_module(module)
+        else:
+            tree = [[], [], get_root_modules(), [], [], [], [], [], []]
+        
+        API_Manager.current_module = module
+        API_Manager._current_path = path
+        API_Manager._data_tree = tree
+        API_Manager._update_filter()
+
 
 
 class API_OT_GOTO_Module(bpy.types.Operator):
     """go to this Module"""
     bl_idname = "api_nav.goto_module"
-    bl_label = "GoTo Module"
+    bl_label = "Go To Module"
     
     info : bpy.props.StringProperty(name='Info', default='')
     
     def execute(self, context):
+
+        def parent(path):
+            """Returns the parent path"""
+            return path.rpartition('[' if path.endswith(']') else '.')[0]
+
         
-        API_PROPS.filter = ''
+        api_prop = context.window_manager.api_props
+
+        api_prop.filter = ''
         
-        type, value = [int(i) for i in self.info.split()]
+        type, value = ( int(i) for i in self.info.split() )
         
         if type == -1:
-            API_PROPS.path = parent(API_PROPS.path)
+            api_prop.path = parent(api_prop.path)
         elif type == -2:
-            API_PROPS.path = DEFAULT_MODULE
-        elif type == 0:
-            API_PROPS.path += f'[\'{API_INFO.get_data()[type][value]}\']'
-        elif type == 1:
-            API_PROPS.path += f'[{value}]'
+            api_prop.path = DEFAULT_MODULE
+        elif type == 0: # index
+            api_prop.path += f"['{API_Manager.filtered_tree[type][value]}']"
+        elif type == 1: # key
+            api_prop.path += f"[{value}]"
         else:
-            if API_PROPS.path:
-                API_PROPS.path += '.'
-            API_PROPS.path += API_INFO.get_data()[type][value]
+            if api_prop.path:
+                api_prop.path += '.'
+            api_prop.path += API_Manager.filtered_tree[type][value]
         
         return {'FINISHED'}
+
+
+class API_OT_Reload(bpy.types.Operator):
+    """Reloads Current module"""
+    bl_idname = "api_nav.reload"
+    bl_label = "Reloads Current module"
+    
+    def execute(self, context):
+        API_Manager.update(forced=True)
+        return {'FINISHED'}
+
 
 class API_OT_Copy_Text(bpy.types.Operator):
     """Copy Text"""
@@ -154,25 +185,9 @@ class API_OT_Copy_Text(bpy.types.Operator):
     text : bpy.props.StringProperty(name='text', default='')
     
     def execute(self, context):
-        bpy.context.window_manager.clipboard = self.text
+        context.window_manager.clipboard = self.text
         return {'FINISHED'}
 
-
-def draw_text( text, layout ):
-    for line in text.split( '\n' ):
-        for l in [ line[i:i+100] for i in range(0, len(line), 100) ]:
-            layout.label(text=' '*8+l)
-  
-def draw_section( layout, label, text='', icon='SCRIPT', newline=False ):
-    box = layout.box()
-    row = box.row()
-    
-    row.label(text=label, icon=icon)
-    if not newline:
-        row.label(text=text)
-    row.operator(API_OT_Copy_Text.bl_idname, text="", icon="COPYDOWN", emboss=False).text = text if text else label
-    if newline and text:
-        draw_text(text, box.column())
 
 class API_OT_Info( bpy.types.Operator ):
     bl_idname = "api.info"
@@ -184,13 +199,29 @@ class API_OT_Info( bpy.types.Operator ):
     
     def invoke( self, context, event ):
         return context.window_manager.invoke_popup( self, width = 600 )
-      
+        
     def draw( self, context ):
-        
-        path = API_PROPS.path
-        current_module = API_INFO.current_module
-        
+        path = context.window_manager.api_props.path
+
+        current_module = API_Manager.current_module
         layout = self.layout
+
+        def draw_text( text, layout ):
+            for line in text.split( '\n' ):
+                for l in [ line[i:i+100] for i in range(0, len(line), 100) ]:
+                    layout.label(text=' '*8+l)
+        
+        def draw_section( layout, label, text='', icon='SCRIPT', newline=False ):
+            box = layout.box()
+            row = box.row()
+            
+            row.label(text=label, icon=icon)
+            if not newline:
+                row.label(text=text)
+            row.operator(API_OT_Copy_Text.bl_idname, text="", icon="COPYDOWN", emboss=False).text = text if text else label
+            if newline and text:
+                draw_text(text, box.column())
+        
         draw_section(layout, label=path)
         draw_section(layout, label='Type:', text=str(type(current_module)), icon="SCRIPT")
         draw_section(layout, label='Return:', text=str(current_module), icon="SCRIPT", newline=True)
@@ -209,38 +240,46 @@ class API_PT_Browser(bpy.types.Panel):
     columns = 3
     
     def draw(self, context):
-        
-        API_INFO.update()
+
+        api_prop = context.window_manager.api_props
+        API_Manager.update()
+
         
         layout = self.layout
 
         col = layout.column(align=True)
         
+        # path bar
         row = col.row(align=True)
-        row.prop(API_PROPS, 'path', text='')
+        row.prop(api_prop, 'path', text='')
+        row.operator(API_OT_Copy_Text.bl_idname, text="", icon="COPYDOWN", emboss=False).text = api_prop.path
+        row.operator(API_OT_Reload.bl_idname, text="", icon="FILE_REFRESH")
         row.operator(API_OT_Info.bl_idname, text="", icon="INFO")
         
+        # operators
         row = col.row(align=True)
         row.operator(API_OT_GOTO_Module.bl_idname, text="Parent", icon="BACK").info = '-1 0'
         row.operator(API_OT_GOTO_Module.bl_idname, text='bpy', emboss=True, icon="FILE_PARENT").info = '-2 0'
         
+        # search bar
         row = layout.row(align=True)
-        row.prop(API_PROPS, "filter", icon='VIEWZOOM', text="")
-        row.prop(API_PROPS, "filter_internal", icon='FILTER', text="", toggle=True)
+        row.prop(api_prop, "filter", icon='VIEWZOOM', text="")
+        row.prop(api_prop, "filter_internal", icon='FILTER', text="", toggle=True)
         
-        data_tree = API_INFO.get_data()
+        data_tree = API_Manager.filtered_tree
         
         for i, category in enumerate(data_tree):
             if not category:
                 continue
             
             box = layout.box()
-            
+
+            # category label
             row = box.row()
             row.label(text=LABELS[i], icon=ICONS[i])
             
+            # items
             col = box.column(align=True)
-            
             for j, entry in enumerate(category):
                 if not (j % self.columns):
                     row = col.row(align=True)
@@ -258,13 +297,12 @@ class API_Props(bpy.types.PropertyGroup):
     
     path : StringProperty(name='path', description='API path', default=DEFAULT_MODULE)
     filter : StringProperty(name='filter', description='Filter entries', default='', options={'TEXTEDIT_UPDATE'})
-    filter_internal : BoolProperty(name='filter internal', description='Filters entries starting with _', default=False)
-    max_entries : IntProperty(name='Reduce to ', description='No. of max entries', default=10, min=1)
-    page : IntProperty(name='Page', description='Display a Page', default=0, min=0)
+    filter_internal : BoolProperty(name='filter internal', description='Filters entries starting with _', default=True)
     
 
 classes = (
     API_OT_GOTO_Module,
+    API_OT_Reload,
     API_OT_Copy_Text,
     API_OT_Info,
     API_PT_Browser,
@@ -275,16 +313,12 @@ def register():
     
     for cls in classes: bpy.utils.register_class(cls)
     bpy.types.WindowManager.api_props = PointerProperty(type=API_Props, name='API Props', description='')
-    
-    global API_PROPS, API_INFO
-    
-    API_PROPS = bpy.context.window_manager.api_props
-    API_INFO = API_Info()
-    
+
+
 def unregister():
     
     del bpy.types.WindowManager.api_props
-    for cls in reverse(classes): bpy.utils.unregister_class(cls)
+    for cls in reversed(classes): bpy.utils.unregister_class(cls)
 
 
 if __name__ == '__main__':
