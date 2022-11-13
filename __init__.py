@@ -163,7 +163,7 @@ class API_Manager:
 
 
 class API_OT_GOTO_Module(bpy.types.Operator):
-    """go to this Module"""
+    """Go to this Module"""
     bl_idname = "api_browser.goto_module"
     bl_label = "Go To Module"
 
@@ -172,7 +172,7 @@ class API_OT_GOTO_Module(bpy.types.Operator):
 
     @classmethod
     def description(cls, context, properties):
-        """provides live description"""
+        # provides live description
 
         api_prop = context.window_manager.api_props
         type, value = (int(i) for i in properties.info.split())
@@ -207,10 +207,9 @@ class API_OT_GOTO_Module(bpy.types.Operator):
 
 
 class API_OT_Reload_Module(bpy.types.Operator):
-    """Reloads Current module"""
+    """Reloads the Current module"""
     bl_idname = "api_browser.reload"
     bl_label = "Reload"
-    bl_description = "Reloads the current module"
 
     def execute(self, context):
         API_Manager.update(forced=True)
@@ -221,7 +220,6 @@ class API_OT_Copy_Text(bpy.types.Operator):
     """Copy Text"""
     bl_idname = "api_browser.copy_text"
     bl_label = "Copy"
-    bl_description = "Copy Text"
 
     text: bpy.props.StringProperty(name="text", default="")
 
@@ -231,9 +229,9 @@ class API_OT_Copy_Text(bpy.types.Operator):
 
 
 class API_OT_Api_Info(bpy.types.Operator):
+    """Show API Info"""
     bl_idname = "api_browser.api_info"
     bl_label = "Info"
-    bl_description = "Show API Info"
 
     def execute(self, context):
         return {'CANCELLED'}
@@ -270,7 +268,7 @@ class API_OT_Api_Info(bpy.types.Operator):
 
 
 class API_PT_Browser(bpy.types.Panel):
-    bl_idname = 'API_PT_api_browser'
+    bl_idname = "API_PT_api_browser"
     bl_space_type = "TEXT_EDITOR"
     bl_region_type = "UI"
     bl_label = "API Browser"
