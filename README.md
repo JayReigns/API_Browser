@@ -18,8 +18,8 @@ addon.
 
 - - - -
 
-3. In Blender go to `Edit > ⚙️Preferences...`
-4. Click on `Add-ons > ⭳Install...`
+3. In Blender go to `Edit` `>` `⚙️Preferences...`
+4. Click on `Add-ons` `>` `Install...`
 5. Load the zip file you just download
 6. Check the box next to `API Browser`
 
