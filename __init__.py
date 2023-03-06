@@ -213,6 +213,7 @@ class API_OT_Reload_Module(bpy.types.Operator):
 
     def execute(self, context):
         API_Manager.update(forced=True)
+        self.report({"INFO"}, "Module Reloaded!")
         return {'FINISHED'}
 
 
@@ -225,6 +226,7 @@ class API_OT_Copy_Text(bpy.types.Operator):
 
     def execute(self, context):
         context.window_manager.clipboard = self.text
+        self.report({"INFO"}, "Path Copied!")
         return {'FINISHED'}
 
 
