@@ -65,7 +65,7 @@ def resolve_path(cur_path, info, default=""):
             cur_path += f"['{API_Manager.get_data_tree()[type][value]}']"
 
         elif type == 1: # index
-            cur_path += f"[{value}]", ""
+            cur_path += f"[{value}]"
 
         else:
             if cur_path:
