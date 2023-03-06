@@ -27,18 +27,14 @@ ICONS = ["TRIA_DOWN", "TRIA_DOWN", "PACKAGE", "WORDWRAP_ON",
 LABELS = ["Items", "Values", "Modules", "Types", "Properties",
           "Structs and Functions", "Methods and Functions", "Attributes", "Inaccessible"]
 
+ENABLED = [True] * len(LABELS)
+
 GOTO_PARENT = -1
 GOTO_DEFAULT = -2
 GOTO_HISTORY = -3
 
-# class Dummy:
-#     columns = 3
-#     default_module = 'bpy'
-#     history_size = 3
-
 def get_preferences(context):
     return context.preferences.addons[__name__].preferences
-    # return Dummy
 
 def resolve_module(path):
     """Returns Python Object from String Path"""
@@ -55,9 +51,10 @@ def parent(path):
 
 
 def resolve_path(cur_path, info, default=""):
-    """Returns tuple(path, filter)"""
+    """Returns tuple(path, filter, enabled[])"""
 
     filter = ""
+    enabled = [True] * len(LABELS)
     type, value = (int(i) for i in info.split())
 
     if type >= 0:
@@ -80,10 +77,9 @@ def resolve_path(cur_path, info, default=""):
 
     elif type == GOTO_HISTORY:
         hist = API_Manager.get_history()[value]
-        cur_path = hist[0]
-        filter = hist[1]
+        cur_path, filter, enabled = hist
     
-    return cur_path, filter
+    return cur_path, filter, enabled
 
 
 def get_module_description(path):
@@ -158,7 +154,7 @@ class API_Manager:
     def _update_history(new_path):
 
         def remove_if_exists(hist, exclude):
-            return [(p,f) for p, f in hist if p not in exclude]
+            return [(p,*d) for p, *d in hist if p not in exclude]
 
         old_path = API_Manager._current_path
         filter = API_Manager._current_filter
@@ -173,7 +169,7 @@ class API_Manager:
         history_size = get_preferences(bpy.context).history_size
 
         # append old_path
-        history.append((old_path, filter))
+        history.append((old_path, filter, ENABLED[:]))
 
         if len(history) > history_size:
             additional = len(history) - history_size
@@ -257,11 +253,25 @@ class API_MT_History_Menu(Menu):
 
 
 class API_OT_History(Operator):
+    """Show History"""
     bl_label = "History"
     bl_idname = "api_browser.history"
 
     def execute(self, context):
         bpy.ops.wm.call_menu(name=API_MT_History_Menu.bl_idname)
+        return {'FINISHED'}
+
+
+class API_OT_EnableDisable(Operator):
+    """Enable/Disable Category"""
+    bl_label = "Enable/Disable"
+    bl_idname = "api_browser.enable_disable"
+
+    index: IntProperty(name="index", default=-1)
+
+    def execute(self, context):
+        global ENABLED
+        ENABLED[self.index] = not ENABLED[self.index]
         return {'FINISHED'}
 
 
@@ -271,7 +281,7 @@ class API_OT_GOTO_Module(Operator):
     bl_label = "Go To Module"
 
     # category_index, item_index; ex: "1 2"
-    info: bpy.props.StringProperty(name="info", default="")
+    info: StringProperty(name="info", default="")
 
 
     @classmethod
@@ -280,21 +290,25 @@ class API_OT_GOTO_Module(Operator):
         prefs = get_preferences(context)
         api_prop = context.window_manager.api_props
 
-        path, _filter = resolve_path(api_prop.path, properties.info, default=prefs.default_module)
+        path, *_ = resolve_path(api_prop.path, properties.info, default=prefs.default_module)
 
         if path:
             return get_module_description(path)
         
 
     def execute(self, context):
+        global ENABLED, LABELS
 
         prefs = get_preferences(context)
         api_prop = context.window_manager.api_props
 
-        path, filter = resolve_path(api_prop.path, self.info, default=prefs.default_module)
+        path, filter, enabled = resolve_path(api_prop.path, self.info, default=prefs.default_module)
 
         api_prop.path = path
         api_prop.filter = filter
+        API_Manager.update_path()
+
+        ENABLED = enabled
         
         return {'FINISHED'}
 
@@ -323,9 +337,9 @@ class API_OT_Copy_Text(Operator):
         return {'FINISHED'}
 
 
-class API_OT_Api_Info(Operator):
-    """Show API Info"""
-    bl_idname = "api_browser.api_info"
+class API_OT_Module_Info(Operator):
+    """Show Module Info"""
+    bl_idname = "api_browser.module_info"
     bl_label = "Info"
 
     def execute(self, context):
@@ -374,6 +388,7 @@ class API_PT_Browser(Panel):
     bl_category = "Text"
 
     def draw(self, context):
+
         API_Manager.check_for_update()
 
         prefs = get_preferences(context)
@@ -388,7 +403,7 @@ class API_PT_Browser(Panel):
         row.operator(API_OT_Copy_Text.bl_idname, text="",
                      icon="COPYDOWN", emboss=False).text = api_prop.path
         row.operator(API_OT_Reload_Module.bl_idname, text="", icon="FILE_REFRESH")
-        row.operator(API_OT_Api_Info.bl_idname, text="", icon="INFO")
+        row.operator(API_OT_Module_Info.bl_idname, text="", icon="INFO")
 
         # operators
         row = col.row(align=True)
@@ -414,19 +429,23 @@ class API_PT_Browser(Panel):
                 continue
 
             box = layout.box()
+            enabled = ENABLED[i]
 
             # category label
             row = box.row()
+            icon = "CHECKBOX_HLT" if enabled else "CHECKBOX_DEHLT"
+            row.operator(API_OT_EnableDisable.bl_idname, text="", icon=icon).index = i
             row.label(text=f"{LABELS[i]} ({len(category)})", icon=ICONS[i])
 
-            # items
-            col = box.column(align=True)
-            for j, entry in enumerate(category):
-                if not (j % columns):
-                    row = col.row(align=True)
+            if enabled:
+                # items
+                col = box.column(align=True)
+                for j, entry in enumerate(category):
+                    if not (j % columns):
+                        row = col.row(align=True)
 
-                row.operator(API_OT_GOTO_Module.bl_idname, text=str(entry),
-                             emboss=True).info = f'{i} {j}'
+                    row.operator(API_OT_GOTO_Module.bl_idname, text=str(entry),
+                                emboss=True).info = f'{i} {j}'
     
         return
 
@@ -488,10 +507,11 @@ class API_Props(PropertyGroup):
 classes = (
     API_MT_History_Menu,
     API_OT_History,
+    API_OT_EnableDisable,
     API_OT_GOTO_Module,
     API_OT_Reload_Module,
     API_OT_Copy_Text,
-    API_OT_Api_Info,
+    API_OT_Module_Info,
     API_PT_Browser,
     APIBrowserAddonPreferences,
     API_Props,
