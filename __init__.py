@@ -21,7 +21,6 @@ LABELS = ["Items", "Values", "Modules", "Types", "Properties",
 
 
 import bpy
-from bpy.props import StringProperty, BoolProperty, PointerProperty
 
 try:  # if bpy.app.version < (3, 3, 0):
     from console.complete_import import get_root_modules
@@ -161,6 +160,7 @@ class API_Manager:
         API_Manager._data_tree = tree
         API_Manager._update_filter()
 
+#########################################################################################
 
 class API_OT_GOTO_Module(bpy.types.Operator):
     """Go to this Module"""
@@ -266,6 +266,7 @@ class API_OT_Api_Info(bpy.types.Operator):
         draw_section(layout, label="Return:", text=str(current_module), icon="SCRIPT", newline=True)
         draw_section(layout, label="Doc:", text=str(current_module.__doc__), icon="INFO", newline=True)
 
+#########################################################################################
 
 class API_PT_Browser(bpy.types.Panel):
     bl_idname = "API_PT_api_browser"
@@ -317,7 +318,7 @@ class API_PT_Browser(bpy.types.Panel):
 
             # category label
             row = box.row()
-            row.label(text=LABELS[i], icon=ICONS[i])
+            row.label(text=f"{LABELS[i]} ({len(category)})", icon=ICONS[i])
 
             # items
             col = box.column(align=True)
@@ -331,6 +332,7 @@ class API_PT_Browser(bpy.types.Panel):
 
 #########################################################################################
 
+from bpy.props import StringProperty, BoolProperty, PointerProperty
 
 class API_Props(bpy.types.PropertyGroup):
 
