@@ -263,8 +263,23 @@ class API_OT_History_Clear(Operator):
         self.report({"INFO"}, "History Cleared!")
         return {'FINISHED'}
 
+class API_MT_History_Menu(Menu):
+    bl_label = "History"
+    bl_idname = "API_MT_History_Menu"
 
-class API_OT_History(Operator):
+    def draw(self, context):
+        
+        api_props = context.window_manager.api_props
+        history = api_props.history
+        layout = self.layout
+
+        layout.operator(API_OT_History_Clear.bl_idname, text="Clear", icon="CANCEL")
+        for i in range(len(history) - 1, -1, -1):
+            item = history[i]
+            layout.operator(API_OT_History.bl_idname, text=item.path).index = i
+
+
+class API_OT_History(Operator, Menu):
     """Show History"""
     bl_label = "History"
     bl_idname = "api_browser.history"
@@ -289,36 +304,20 @@ class API_OT_History(Operator):
     def poll(cls, context):
         return len(context.window_manager.api_props.history) > 0
 
-    def invoke(self, context, event):
-        if self.index == -1:
-            return context.window_manager.invoke_popup(self)#, width=600)
-        else:
-            return self.execute(context)
-
     def execute(self, context):
 
         api_props = context.window_manager.api_props
         idx = self.index
+
+        if idx == -1:
+            bpy.ops.wm.call_menu(name=API_MT_History_Menu.bl_idname)
+            return {'FINISHED'}
 
         hist = api_props.history[idx]
         api_props.path = hist.path
         self.index = -1
 
         return {'FINISHED'}
-
-    def draw(self, context):
-
-        api_props = context.window_manager.api_props
-        history = api_props.history
-
-        row = self.layout.row()
-        row.label(text="History", icon="RECOVER_LAST")
-        row.operator(API_OT_History_Clear.bl_idname, text="Clear", icon="CANCEL")
-
-        col = self.layout.column(align=True)
-        for i in range(len(history) - 1, -1, -1):
-            item = history[i]
-            col.operator(API_OT_History.bl_idname, text=item.path).index = i
 
 
 class API_OT_EnableDisable(Operator):
@@ -612,15 +611,33 @@ class API_History_Props(PropertyGroup):
         default="",
         options={'TEXTEDIT_UPDATE'},
     )
+
+# API_Props can extend API_History_Props
+# to save redundancy
+# but does not work in blender 2.80
+class API_Props(PropertyGroup):
+
+    path: StringProperty(
+        name="Path",
+        description="API path",
+        default="bpy",
+    )
+    category_enable_flag: IntProperty(
+        name="Category Enable Flag",
+        description="Category Enable/Disable Flag",
+        default=0xFFFF,
+    )
+    filter: StringProperty(
+        name="Filter",
+        description="Filters matching entries",
+        default="",
+        options={'TEXTEDIT_UPDATE'},
+    )
     filter_internal: BoolProperty(
         name="Filter Internal",
         description="Filters entries starting with '_'",
         default=True,
     )
-
-
-class API_Props(API_History_Props):
-
     history: CollectionProperty(
         type=API_History_Props,
         name="API History Props",
@@ -629,6 +646,7 @@ class API_Props(API_History_Props):
 
 
 classes = (
+    API_MT_History_Menu,
     API_OT_History_Clear,
     API_OT_History,
     API_OT_EnableDisable,
