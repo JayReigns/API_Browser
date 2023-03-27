@@ -522,7 +522,6 @@ class API_PT_Browser(Panel):
                      emboss=True, icon="FILE_PARENT")
 
         # history
-        # row = row.row(align=True)
         row.operator(API_OT_History.bl_idname, text="", icon="RECOVER_LAST")
 
         # search bar
