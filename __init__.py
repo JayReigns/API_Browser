@@ -541,9 +541,11 @@ class API_PT_Browser(Panel):
 
             # category label
             row = box.row()
-            chk = "CHECKBOX_HLT" if c_enabled else "CHECKBOX_DEHLT"
             row.operator(API_OT_EnableDisable.bl_idname,
-                         text="", icon=chk).index = i
+                         text="",
+                         icon="DISCLOSURE_TRI_DOWN" if c_enabled else "DISCLOSURE_TRI_RIGHT",
+                         emboss=False,
+            ).index = i
             row.label(text=f"{c_label} ({len(category)})", icon=c_icon)
 
             if c_enabled:
@@ -553,8 +555,10 @@ class API_PT_Browser(Panel):
                     if not (j % columns):
                         row = col.row(align=True)
 
-                    row.operator(API_OT_GOTO_Sub_Module.bl_idname, text=str(entry),
-                                 emboss=True).info = f'{i} {j}'
+                    row.operator(API_OT_GOTO_Sub_Module.bl_idname,
+                                 text=str(entry),
+                                 emboss=True,
+                    ).info = f'{i} {j}'
 
         return
 
