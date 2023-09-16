@@ -605,7 +605,7 @@ class API_Props(PropertyGroup):
     path: StringProperty(
         name="Path",
         description="API path",
-        default=get_preferences().default_module,
+        default="bpy",
     )
     old_path: StringProperty(
         name="Old Path",
