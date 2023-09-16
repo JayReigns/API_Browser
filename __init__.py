@@ -2,7 +2,7 @@
 bl_info = {
     "name": "API Browser",
     "author": "JayReigns",
-    "version": (2, 0, 0),
+    "version": (2, 1, 0),
     "blender": (2, 80, 0),
     "location": "Text Editor > ToolBar > API Browser",
     "description": "Browse through the python api via the user interface",
@@ -19,7 +19,7 @@ except ImportError:  # else:
     from bl_console_utils.autocomplete.complete_import import get_root_modules
 
 
-# labels, icons
+# labels, icons(unused)
 CATEGORIES = (
     ('Items', 'TRIA_DOWN'),
     ('Values', 'TRIA_DOWN'),
@@ -32,21 +32,111 @@ CATEGORIES = (
     ('Inaccessible', 'ERROR'),
 )
 
+_DATA_TREE = None
 
-EXCEPTIONS = None
+def get_props():
+    return bpy.context.window_manager.api_props
 
 
 def get_preferences():
     try:
         return bpy.context.preferences.addons[__name__].preferences
     except:
-        # Used when running inside TextEditor
-        class Dummy:
+        # Used when running inside Blender TextEditor
+        class DummyPreference:
             default_module = 'bpy'
             columns = 3
             history_size = 10
-        return Dummy
+        return DummyPreference
 
+
+def get_data_tree(update=False, reload=False):
+    global _DATA_TREE
+    api_props = get_props()
+
+    if _DATA_TREE == None or reload:
+       _DATA_TREE = categorize_module(api_props.path)
+    
+    elif update:
+        new_path = api_props.path
+        old_path = api_props.old_path
+        
+        if new_path != old_path:
+            _DATA_TREE = categorize_module(new_path)
+            update_history(new_path, old_path)
+            api_props.old_path = new_path
+    
+    filtered = filter_tree(_DATA_TREE)
+    return filtered
+
+
+def filter_tree(tree):
+
+    api_props = get_props()
+
+    filter_text = api_props.filter.lower()
+    filter_internal = api_props.filter_internal
+
+    if filter_text and filter_internal:
+        tree = [[mod for mod in cat if not mod.startswith('_') and filter_text in mod.lower()]
+                for cat in tree]
+
+    elif filter_internal:
+        tree = [[mod for mod in cat if not mod.startswith('_')]
+                for cat in tree]
+
+    elif filter_text:
+        tree = [[mod for mod in cat if filter_text in mod.lower()]
+                for cat in tree]
+
+    return tree
+
+
+def update_history(new_path, old_path):
+
+    # in case of reload don't change history
+    if new_path == old_path:
+        return
+    
+    prefs = get_preferences()
+    api_props = get_props()
+    history = api_props.history
+
+    if old_path:    # don't add empty path
+        # add to history
+        hist = history.add()
+        hist.name = hist.path = old_path
+        hist.category_enable_flag = api_props.category_enable_flag
+        hist.filter = api_props.filter
+        # hist.filter_internal = api_props.filter_internal
+
+    # reset props
+    api_props.category_enable_flag = 0xFFFF
+    api_props.filter = ""
+
+    if new_path:
+        # check if exists in history
+        idx = history.find(new_path)
+        if idx != -1:
+            # copy props from history
+            hist = history[idx]
+            api_props.category_enable_flag = hist.category_enable_flag
+            api_props.filter = hist.filter
+            # api_props.filter_internal = hist.filter_internal
+
+            # remove
+            history.remove(idx)
+
+    # remove extras
+    extra = len(history) - prefs.history_size
+    for i in range(0, extra):
+        history.remove(i)
+
+
+
+#########################################################################################
+# UTILITY FUNCTIONS
+#########################################################################################
 
 def resolve_module(path):
     """Returns Python Object from String Path"""
@@ -65,7 +155,7 @@ def parent(path):
 def resolve_path(path, info):
     """Returns Submodule path from info=(cat, idx) tuple"""
 
-    data_tree = API_Manager.get_data_tree()
+    data_tree = get_data_tree()
     
     cat, idx = (int(i) for i in info.split())
 
@@ -140,111 +230,6 @@ def categorize_module(path):
     return [itm, val, mod, typ, props, struct, met, att, bug]
 
 
-class API_Manager:
-
-    # used to check for changes
-    _current_path = None
-    _current_filter = None
-    _filter_internal = None
-
-    # used internally
-    _data_tree = None
-    _filtered_tree = None
-
-    def get_data_tree():
-        return API_Manager._filtered_tree
-    
-    def update():
-        api_props = bpy.context.window_manager.api_props
-
-        if api_props.path != API_Manager._current_path:
-            API_Manager.update_path()
-
-        elif api_props.filter != API_Manager._current_filter \
-                or api_props.filter_internal != API_Manager._filter_internal:
-            API_Manager.update_filter()
-
-
-    def update_filter():
-
-        api_props = bpy.context.window_manager.api_props
-
-        filter_text = api_props.filter.lower()
-        filter_internal = api_props.filter_internal
-        tree = API_Manager._data_tree
-
-        if filter_text and filter_internal:
-            tree = [[mod for mod in cat if not mod.startswith('_') and filter_text in mod.lower()]
-                    for cat in tree]
-
-        elif filter_internal:
-            tree = [[mod for mod in cat if not mod.startswith('_')]
-                    for cat in tree]
-
-        elif filter_text:
-            tree = [[mod for mod in cat if filter_text in mod.lower()]
-                    for cat in tree]
-
-        API_Manager._current_filter = api_props.filter
-        API_Manager._filter_internal = api_props.filter_internal
-        API_Manager._filtered_tree = tree
-
-
-    def update_history(new_path, old_path):
-
-        # in case of reload don't change history
-        if new_path == old_path:
-            return
-        
-        prefs = get_preferences()
-        api_props = bpy.context.window_manager.api_props
-        history = api_props.history
-
-        if old_path:    # don't push empty path
-            # push to history
-            hist = history.add()
-            hist.name = old_path
-            hist.path = old_path
-            hist.category_enable_flag = api_props.category_enable_flag
-            hist.filter = api_props.filter
-            # hist.filter_internal = api_props.filter_internal
-
-        # reset props
-        api_props.category_enable_flag = 0xFFFF
-        api_props.filter = ""
-
-        if new_path:
-            # check if exists in history
-            idx = history.find(new_path)
-            if idx != -1:
-                # copy props from history
-                hist = history[idx]
-                api_props.category_enable_flag = hist.category_enable_flag
-                api_props.filter = hist.filter
-                # api_props.filter_internal = hist.filter_internal
-
-                # remove
-                history.remove(idx)
-
-        # remove extras
-        hist_limit = prefs.history_size
-        for i in range(0, len(history) - hist_limit):
-            history.remove(i)
-    
-
-    def update_path():
-
-        api_props = bpy.context.window_manager.api_props
-        new_path = api_props.path
-        old_path = API_Manager._current_path
-
-        API_Manager._data_tree = categorize_module(new_path)
-        API_Manager.update_history(new_path, old_path)
-        API_Manager._current_path = new_path
-
-        API_Manager.update_filter()
-
-
 #########################################################################################
 # OPERATORS, MENUS
 #########################################################################################
@@ -257,7 +242,7 @@ class API_OT_History_Clear(Operator):
 
     def execute(self, context):
 
-        api_props = context.window_manager.api_props
+        api_props = get_props()
         api_props.history.clear()
 
         self.report({"INFO"}, "History Cleared!")
@@ -269,7 +254,7 @@ class API_MT_History_Menu(Menu):
 
     def draw(self, context):
         
-        api_props = context.window_manager.api_props
+        api_props = get_props()
         history = api_props.history
         layout = self.layout
 
@@ -289,7 +274,7 @@ class API_OT_History(Operator, Menu):
     @classmethod
     def description(cls, context, properties):
 
-        api_props = context.window_manager.api_props
+        api_props = get_props()
         idx = properties.index
 
         if idx == -1:
@@ -302,11 +287,11 @@ class API_OT_History(Operator, Menu):
 
     @classmethod
     def poll(cls, context):
-        return len(context.window_manager.api_props.history) > 0
+        return len(get_props().history) > 0
 
     def execute(self, context):
 
-        api_props = context.window_manager.api_props
+        api_props = get_props()
         idx = self.index
 
         if idx == -1:
@@ -329,7 +314,7 @@ class API_OT_EnableDisable(Operator):
 
     def execute(self, context):
 
-        api_props = context.window_manager.api_props
+        api_props = get_props()
         c_flag = api_props.category_enable_flag
         c_mask = 0x1 << self.index
         api_props.category_enable_flag = c_flag ^ c_mask
@@ -344,11 +329,11 @@ class API_OT_GOTO_Parent(Operator):
 
     @classmethod
     def poll(cls, context):
-        return True if context.window_manager.api_props.path else False
+        return get_props().path
 
     @classmethod
     def description(cls, context, properties):
-        api_props = context.window_manager.api_props
+        api_props = get_props()
         path = parent(api_props.path)
 
         if path:
@@ -356,7 +341,7 @@ class API_OT_GOTO_Parent(Operator):
 
     def execute(self, context):
 
-        api_props = context.window_manager.api_props
+        api_props = get_props()
         api_props.path = parent(api_props.path)
 
         return {'FINISHED'}
@@ -378,7 +363,7 @@ class API_OT_GOTO_Default(Operator):
     def execute(self, context):
 
         prefs = get_preferences()
-        api_props = context.window_manager.api_props
+        api_props = get_props()
         api_props.path = prefs.default_module
 
         return {'FINISHED'}
@@ -394,7 +379,7 @@ class API_OT_GOTO_Sub_Module(Operator):
 
     @classmethod
     def description(cls, context, properties):
-        api_props = context.window_manager.api_props
+        api_props = get_props()
         path = resolve_path(api_props.path, properties.info)
 
         if path:
@@ -402,7 +387,7 @@ class API_OT_GOTO_Sub_Module(Operator):
 
     def execute(self, context):
 
-        api_props = context.window_manager.api_props
+        api_props = get_props()
         api_props.path = resolve_path(api_props.path, self.info)
 
         return {'FINISHED'}
@@ -415,8 +400,7 @@ class API_OT_Reload_Module(Operator):
 
     def execute(self, context):
 
-        # api_props = context.window_manager.api_props
-        API_Manager.update_path()
+        get_data_tree(reload=True)
 
         self.report({"INFO"}, "Module Reloaded!")
         return {'FINISHED'}
@@ -444,18 +428,18 @@ class API_OT_Module_Info(Operator):
 
     @classmethod
     def poll(cls, context):
-        return True if context.window_manager.api_props.path else False
+        return get_props().path
 
     def execute(self, context):
         return {'CANCELLED'}
 
     def invoke(self, context, event):
-        path = context.window_manager.api_props.path
+        path = get_props().path
         self.module = resolve_module(path)
         return context.window_manager.invoke_popup(self, width=600)
 
     def draw(self, context):
-        path = context.window_manager.api_props.path
+        path = get_props().path
         current_module = self.module
         layout = self.layout
 
@@ -494,12 +478,10 @@ class API_PT_Browser(Panel):
 
     def draw(self, context):
 
-        API_Manager.update()
-
         prefs = get_preferences()
-        api_props = context.window_manager.api_props
+        api_props = get_props()
 
-        data_tree = API_Manager.get_data_tree()
+        data_tree = get_data_tree(update=True)
         columns = prefs.columns
         c_flag = api_props.category_enable_flag
 
@@ -540,12 +522,12 @@ class API_PT_Browser(Panel):
 
             # category label
             row = box.row()
+            row.alignment = 'LEFT'
             row.operator(API_OT_EnableDisable.bl_idname,
-                         text="",
-                         icon="DISCLOSURE_TRI_DOWN" if c_enabled else "DISCLOSURE_TRI_RIGHT",
+                         text=f"{c_label} ({len(category)})",
+                         icon="DOWNARROW_HLT" if c_enabled else "RIGHTARROW",
                          emboss=False,
             ).index = i
-            row.label(text=f"{c_label} ({len(category)})", icon=c_icon)
 
             if c_enabled:
                 # items
@@ -601,7 +583,7 @@ class API_History_Props(PropertyGroup):
     path: StringProperty(
         name="Path",
         description="API path",
-        default="bpy",
+        # default="bpy",
     )
     category_enable_flag: IntProperty(
         name="Category Enable Flag",
@@ -623,7 +605,12 @@ class API_Props(PropertyGroup):
     path: StringProperty(
         name="Path",
         description="API path",
-        default="bpy",
+        default=get_preferences().default_module,
+    )
+    old_path: StringProperty(
+        name="Old Path",
+        description="Old API path",
+        default=""
     )
     category_enable_flag: IntProperty(
         name="Category Enable Flag",
@@ -644,7 +631,7 @@ class API_Props(PropertyGroup):
     history: CollectionProperty(
         type=API_History_Props,
         name="API History Props",
-        description=""
+        description="Previous Paths",
     )
 
 
@@ -679,7 +666,6 @@ def register():
     bpy.types.WindowManager.api_props = PointerProperty(
         type=API_Props,
         name="API Props",
-        description="",
     )
 
 
