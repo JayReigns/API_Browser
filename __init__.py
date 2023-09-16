@@ -203,7 +203,8 @@ def categorize_module(path):
     module = resolve_module(path)
 
     if isiterable(module):
-        if hasattr(module, 'keys'):
+        if hasattr(module, 'keys') \
+            and len(module) == len(module.keys()): # special check for <class 'bpy_prop_collection'>
             itm = [str(k) for k in module.keys()]
         else:
             val = [str(v) for v in module]
