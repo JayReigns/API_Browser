@@ -668,6 +668,8 @@ def register():
         name="API Props",
     )
 
+    get_props().path = get_preferences().default_module
+
 
 def unregister():
 
