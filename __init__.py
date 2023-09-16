@@ -53,6 +53,7 @@ def get_preferences():
 def get_data_tree(update=False, reload=False):
     global _DATA_TREE
     api_props = get_props()
+    prefs = get_preferences()
 
     if _DATA_TREE == None or reload:
        _DATA_TREE = categorize_module(api_props.path)
@@ -61,7 +62,7 @@ def get_data_tree(update=False, reload=False):
         new_path = api_props.path
         old_path = api_props.old_path
         
-        if new_path != old_path:
+        if prefs.auto_reload or new_path != old_path:
             _DATA_TREE = categorize_module(new_path)
             update_history(new_path, old_path)
             api_props.old_path = new_path
@@ -493,7 +494,7 @@ class API_PT_Browser(Panel):
         row.prop(api_props, 'path', text='')
         row.operator(API_OT_Copy_Text.bl_idname, text="",
                      icon="COPYDOWN", emboss=False).text = api_props.path
-        row.operator(API_OT_Reload_Module.bl_idname,
+        if not prefs.auto_reload: row.operator(API_OT_Reload_Module.bl_idname,
                      text="", icon="FILE_REFRESH")
         row.operator(API_OT_Module_Info.bl_idname, text="", icon="INFO")
 
@@ -562,6 +563,11 @@ class APIBrowserAddonPreferences(AddonPreferences):
         description="Number of history items to keep",
         default=10,
     )
+    auto_reload: BoolProperty(
+        name="Auto Reload",
+        description="Automatically Reload Modules",
+        default=True,
+    )
 
     def draw(self, context):
         layout = self.layout
@@ -572,6 +578,7 @@ class APIBrowserAddonPreferences(AddonPreferences):
         col.prop(self, "default_module")
         col.prop(self, "columns")
         col.prop(self, "history_size")
+        col.prop(self, "auto_reload")
 
 
 #########################################################################################
