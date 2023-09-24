@@ -47,6 +47,7 @@ def get_preferences():
             default_module = 'bpy'
             columns = 3
             history_size = 10
+            auto_reload = True
         return DummyPreference
 
 
