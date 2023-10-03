@@ -79,19 +79,15 @@ def filter_tree(tree):
     filter_text = api_props.filter.lower()
     filter_internal = api_props.filter_internal
 
-    if filter_text and filter_internal:
-        tree = [[mod for mod in cat if not mod.startswith('_') and filter_text in mod.lower()]
-                for cat in tree]
+    if filter_internal:
+        tree = ([mod for mod in cat if not mod.startswith('_')]
+                for cat in tree)
 
-    elif filter_internal:
-        tree = [[mod for mod in cat if not mod.startswith('_')]
-                for cat in tree]
-
-    elif filter_text:
-        tree = [[mod for mod in cat if filter_text in mod.lower()]
-                for cat in tree]
-
-    return tree
+    if filter_text:
+        tree = ([mod for mod in cat if filter_text in mod.lower()]
+                for cat in tree)
+    
+    return list(tree)
 
 
 def update_history(new_path, old_path):
