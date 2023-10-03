@@ -290,7 +290,7 @@ class API_OT_History(Operator, Menu):
 
     @classmethod
     def poll(cls, context):
-        return len(get_props().history) > 0
+        return get_props().history
 
     def execute(self, context):
 
@@ -299,11 +299,10 @@ class API_OT_History(Operator, Menu):
 
         if idx == -1:
             bpy.ops.wm.call_menu(name=API_MT_History_Menu.bl_idname)
-            return {'FINISHED'}
-
-        hist = api_props.history[idx]
-        api_props.path = hist.path
-        self.index = -1
+        else:
+            hist = api_props.history[idx]
+            api_props.path = hist.path
+            self.index = -1
 
         return {'FINISHED'}
 
