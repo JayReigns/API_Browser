@@ -174,11 +174,10 @@ def resolve_path(path, info):
 def get_module_description(path):
     module = resolve_module(path)
     desc = str(module)
-    doc = str(module.__doc__).rstrip()
 
-    if doc != "None":
+    if module.__doc__:
         # omit last '.'; blender adds an '.' after
-        desc += "\n\n" + doc[:-1] if doc.endswith(".") else doc
+        desc += "\n\n" + str(module.__doc__).rstrip(" .")
 
     return desc
 
