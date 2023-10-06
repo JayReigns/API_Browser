@@ -158,7 +158,10 @@ def resolve_path(path, info):
     cat, idx = (int(i) for i in info.split())
 
     if cat == 0:  # key
-        path += f"['{data_tree[cat][idx]}']"
+        key = data_tree[cat][idx]
+        # escape \' characters
+        key = key.replace("\\", "\\\\").replace("'", "\\'")
+        path += f"['{key}']"
 
     elif cat == 1:  # index
         path += f"[{idx}]"
