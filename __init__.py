@@ -210,7 +210,7 @@ def categorize_module(path):
 
     for i in dir(module):
         try:
-            t = str(type(eval(f"module.{i}", {'module': module})))
+            t = str(type(getattr(module, i)))
         except:
             bug += [i]
             continue
