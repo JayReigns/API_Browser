@@ -113,8 +113,9 @@ def update_history(new_path, old_path):
         hist.page_indices = api_props.page_indices
 
     # reset props
-    api_props.category_enable_flag = 0xFFFF
     api_props.filter = ""
+    api_props.category_toggles = (True,) * len(CATEGORIES)
+    api_props.page_indices = (1,) * len(CATEGORIES)
 
     if new_path:
         # check if exists in history
