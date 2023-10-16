@@ -139,14 +139,17 @@ def update_history(new_path, old_path):
 def resolve_module(path):
     """Returns Python Object from String Path"""
     try:
-        module = path.split('.', 1)[0]
-        return eval(path, {module: __import__(module)})
+        mod, dot, rest = path.partition('.')
+        # replace mod with 'mod' incase of illegal mod-name eg. - in 'API_Browser-main'
+        path = 'mod' + dot + rest
+        return  eval(path, {'mod': __import__(mod)})
     except:
         return None
 
 
 def parent(path):
     """Returns the parent path"""
+    # TODO: fix ['" characters in key
     return path.rpartition('[' if path.endswith(']') else '.')[0]   # rsplit() not used
 
 
