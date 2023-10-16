@@ -11,7 +11,8 @@ bl_info = {
 
 import bpy
 from bpy.types import Operator, Menu, Panel, PropertyGroup, AddonPreferences
-from bpy.props import IntProperty, StringProperty, BoolProperty, PointerProperty, CollectionProperty
+from bpy.props import IntProperty, StringProperty, BoolProperty,\
+    PointerProperty, CollectionProperty, BoolVectorProperty, IntVectorProperty
 
 try:  # if bpy.app.version < (3, 3, 0):
     from console.complete_import import get_root_modules
@@ -46,7 +47,9 @@ def get_preferences():
         class DummyPreference:
             default_module = 'bpy'
             columns = 3
+            rows = 10
             history_size = 10
+            restore_history_settings = True
             auto_reload = True
         return DummyPreference
 
@@ -104,9 +107,10 @@ def update_history(new_path, old_path):
         # add to history
         hist = history.add()
         hist.name = hist.path = old_path
-        hist.category_enable_flag = api_props.category_enable_flag
+        
         hist.filter = api_props.filter
-        # hist.filter_internal = api_props.filter_internal
+        hist.category_toggles = api_props.category_toggles
+        hist.page_indices = api_props.page_indices
 
     # reset props
     api_props.category_enable_flag = 0xFFFF
@@ -116,11 +120,13 @@ def update_history(new_path, old_path):
         # check if exists in history
         idx = history.find(new_path)
         if idx != -1:
-            # copy props from history
             hist = history[idx]
-            api_props.category_enable_flag = hist.category_enable_flag
-            api_props.filter = hist.filter
-            # api_props.filter_internal = hist.filter_internal
+
+            if prefs.restore_history_settings:
+                # copy props from history
+                api_props.filter = hist.filter
+                api_props.category_toggles = hist.category_toggles
+                api_props.page_indices = hist.page_indices
 
             # remove
             history.remove(idx)
@@ -308,23 +314,6 @@ class API_OT_History(Operator, Menu):
         return {'FINISHED'}
 
 
-class API_OT_EnableDisable(Operator):
-    """Enable/Disable Category"""
-    bl_label = "Enable/Disable"
-    bl_idname = "api_browser.enable_disable"
-
-    index: IntProperty(name="index", default=-1)
-
-    def execute(self, context):
-
-        api_props = get_props()
-        c_flag = api_props.category_enable_flag
-        c_mask = 0x1 << self.index
-        api_props.category_enable_flag = c_flag ^ c_mask
-
-        return {'FINISHED'}
-
-
 class API_OT_GOTO_Parent(Operator):
     """Go to parent Module"""
     bl_idname = "api_browser.goto_parent_module"
@@ -486,7 +475,8 @@ class API_PT_Browser(Panel):
 
         data_tree = get_data_tree(update=True)
         columns = prefs.columns
-        c_flag = api_props.category_enable_flag
+        rows = prefs.rows
+        count = rows * columns
 
         layout = self.layout
         col = layout.column(align=True)
@@ -521,21 +511,39 @@ class API_PT_Browser(Panel):
 
             box = layout.box()
             c_label, c_icon = CATEGORIES[i]
-            c_enabled = c_flag & (0x1 << i)
+            c_enabled = api_props.category_toggles[i]
 
-            # category label
+            page_index = api_props.page_indices[i]
+            page_index = min(page_index, -(len(category) // -count)) # ceil div
+            api_props.page_indices[i] = page_index
+
+            start = (page_index -1) * count
+            end = min(start+count, len(category))
+
+            overflow = len(category) > count
+
             row = box.row()
+            if overflow:
+                split = row.split(factor=0.8)
+                row = split.row()
+
             row.alignment = 'LEFT'
-            row.operator(API_OT_EnableDisable.bl_idname,
-                         text=f"{c_label} ({len(category)})",
-                         icon="DOWNARROW_HLT" if c_enabled else "RIGHTARROW",
-                         emboss=False,
-            ).index = i
+            # category label
+            label = f"{c_label} ({start}-{end} / {len(category)})" if overflow \
+                    else f"{c_label} ({len(category)})"
+            row.prop(api_props, "category_toggles", index=i, text=label, emboss=False,
+                    icon="DOWNARROW_HLT" if c_enabled else "RIGHTARROW",)
+            
+            if overflow:
+                row = split.row()
+                row.alignment = 'RIGHT'
+                row.prop(api_props, "page_indices", index=i, text="")
 
             if c_enabled:
                 # items
                 col = box.column(align=True)
-                for j, entry in enumerate(category):
+                row = col.row(align=True) # fix for a bug when count isnt't multiple of columns
+                for j, entry in zip(range(start, end),category[start:]):
                     if not (j % columns):
                         row = col.row(align=True)
 
@@ -556,14 +564,27 @@ class APIBrowserAddonPreferences(AddonPreferences):
         default="bpy",
     )
     columns: IntProperty(
-        name="Column Count",
+        name="Columns",
         description="Column count",
         default=3,
+        min=1,
+    )
+    rows: IntProperty(
+        name="Rows",
+        description="Rows count",
+        default=10,
+        min=1,
     )
     history_size: IntProperty(
         name="History Size",
         description="Number of history items to keep",
         default=10,
+        min=1
+    )
+    restore_history_settings: BoolProperty(
+        name="Restore History Settings",
+        description="Restores filters, category toggles, page indices etc",
+        default=True,
     )
     auto_reload: BoolProperty(
         name="Auto Reload",
@@ -579,7 +600,9 @@ class APIBrowserAddonPreferences(AddonPreferences):
         col = layout.column(align=True)
         col.prop(self, "default_module")
         col.prop(self, "columns")
+        col.prop(self, "rows")
         col.prop(self, "history_size")
+        col.prop(self, "restore_history_settings")
         col.prop(self, "auto_reload")
 
 
@@ -594,16 +617,24 @@ class API_History_Props(PropertyGroup):
         description="API path",
         # default="bpy",
     )
-    category_enable_flag: IntProperty(
-        name="Category Enable Flag",
-        description="Category Enable/Disable Flag",
-        default=0xFFFF,
-    )
     filter: StringProperty(
         name="Filter",
         description="Filters matching entries",
         default="",
         options={'TEXTEDIT_UPDATE'},
+    )
+    category_toggles: BoolVectorProperty(
+        name="Category Toggles",
+        description="Expand/Collapse Category",
+        default=(True,) * len(CATEGORIES),
+        size=len(CATEGORIES),
+    )
+    page_indices: IntVectorProperty(
+        name="Page Indices",
+        description="Current page indices",
+        default=(1,) * len(CATEGORIES),
+        size=len(CATEGORIES),
+        min=1,
     )
 
 # API_Props can extend API_History_Props
@@ -621,17 +652,26 @@ class API_Props(PropertyGroup):
         description="Old API path",
         default=""
     )
-    category_enable_flag: IntProperty(
-        name="Category Enable Flag",
-        description="Category Enable/Disable Flag",
-        default=0xFFFF,
-    )
     filter: StringProperty(
         name="Filter",
         description="Filters matching entries",
         default="",
         options={'TEXTEDIT_UPDATE'},
     )
+    category_toggles: BoolVectorProperty(
+        name="Category Toggles",
+        description="Expand/Collapse Category",
+        default=(True,) * len(CATEGORIES),
+        size=len(CATEGORIES),
+    )
+    page_indices: IntVectorProperty(
+        name="Page Indices",
+        description="Current page indices",
+        default=(1,) * len(CATEGORIES),
+        size=len(CATEGORIES),
+        min=1,
+    )
+
     filter_internal: BoolProperty(
         name="Filter Internal",
         description="Filters entries starting with '_'",
@@ -653,7 +693,6 @@ classes = (
     API_MT_History_Menu,
     API_OT_History_Clear,
     API_OT_History,
-    API_OT_EnableDisable,
     API_OT_GOTO_Parent,
     API_OT_GOTO_Default,
     API_OT_GOTO_Sub_Module,
