@@ -134,7 +134,7 @@ def update_history(new_path, old_path):
 
     # remove extras
     extra = len(history) - prefs.history_size
-    for i in range(0, extra):
+    for i in range(extra):
         history.remove(i)
 
 
@@ -205,7 +205,7 @@ def categorize_module(path):
             return False
 
     if not path:
-        return [[], [], get_root_modules(), [], [], [], [], [], []]
+        return [], [], get_root_modules(), [], [], [], [], [], []
 
     itm, val, mod, typ, props, struct, met, att, bug = [], [], [], [], [], [], [], [], []
 
@@ -222,23 +222,23 @@ def categorize_module(path):
         try:
             t = str(type(getattr(module, i)))
         except:
-            bug += [i]
+            bug.append( i )
             continue
 
         if t == "<class 'module'>":
-            mod += [i]
+            mod.append( i )
         elif t.startswith("<class 'bpy_prop"):
-            props += [i]
+            props.append( i )
         elif t.startswith("<class 'bpy"):
-            struct += [i]
+            struct.append( i )
         elif t == "<class 'builtin_function_or_method'>":
-            met += [i]
+            met.append( i )
         elif t == "<class 'type'>":
-            typ += [i]
+            typ.append( i )
         else:
-            att += [i]
+            att.append( i )
 
-    return [itm, val, mod, typ, props, struct, met, att, bug]
+    return itm, val, mod, typ, props, struct, met, att, bug
 
 
 #########################################################################################
@@ -530,7 +530,7 @@ class API_PT_Browser(Panel):
 
             row.alignment = 'LEFT'
             # category label
-            label = f"{c_label} ({start}-{end} / {len(category)})" if overflow \
+            label = f"{c_label} ({start+1}-{end} / {len(category)})" if overflow \
                     else f"{c_label} ({len(category)})"
             row.prop(api_props, "category_toggles", index=i, text=label, emboss=False,
                     icon="DOWNARROW_HLT" if c_enabled else "RIGHTARROW",)
