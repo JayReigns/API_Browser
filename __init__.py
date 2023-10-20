@@ -2,7 +2,7 @@
 bl_info = {
     "name": "API Browser",
     "author": "JayReigns",
-    "version": (3, 0, 0),
+    "version": (3, 1, 0),
     "blender": (2, 80, 0),
     "location": "Text Editor > ToolBar > API Browser",
     "description": "Browse through the python api via the user interface",
