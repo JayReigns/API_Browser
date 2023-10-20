@@ -83,12 +83,14 @@ def filter_tree(tree):
     filter_text = api_props.filter.lower()
     filter_internal = api_props.filter_internal
 
+    tree = ([(idx, mod) for idx, mod in enumerate(cat)] for cat in tree)
+
     if filter_internal:
-        tree = ([mod for mod in cat if not mod.startswith('_')]
+        tree = ([(idx, mod) for idx, mod in cat if not mod.startswith('_')]
                 for cat in tree)
 
     if filter_text:
-        tree = ([mod for mod in cat if filter_text in mod.lower()]
+        tree = ([(idx, mod) for idx, mod in cat if filter_text in mod.lower()]
                 for cat in tree)
     
     return list(tree)
@@ -162,14 +164,13 @@ def parent(path):
 
 
 def resolve_path(path, info):
-    """Returns Submodule path from info=(cat, idx) tuple"""
+    """Returns Submodule path from info=(cat, idx, word) tuple"""
 
-    data_tree = get_data_tree()
-    
-    cat, idx = (int(i) for i in info.split())
+    cat, idx, word = info.split()
+    cat = int(cat)
 
     if cat == 0:  # key
-        key = data_tree[cat][idx]
+        key = word
         # escape \' characters
         key = key.replace("\\", "\\\\").replace("'", "\\'")
         path += f"['{key}']"
@@ -180,7 +181,7 @@ def resolve_path(path, info):
     else:
         if path:
             path += '.'
-        path += data_tree[cat][idx]
+        path += word
 
     return path
 
@@ -589,14 +590,14 @@ class API_PT_Browser(Panel):
                 # items
                 col = box.column(align=True)
                 row = col.row(align=True) # fix for a bug when count isnt't multiple of columns
-                for j, entry in zip(range(start, end),category[start:]):
+                for j, (idx, entry) in zip(range(start, end),category[start:]):
                     if not (j % columns):
                         row = col.row(align=True)
 
                     row.operator(API_OT_GOTO_Sub_Module.bl_idname,
                                  text=str(entry),
                                  emboss=True,
-                    ).info = f'{i} {j}'
+                    ).info = f'{i} {idx} {entry}'
 
         return
 
