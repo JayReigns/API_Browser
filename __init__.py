@@ -9,7 +9,7 @@ bl_info = {
     "category": "Development"
 }
 
-import builtins
+import re, builtins
 import bpy
 from bpy.types import Operator, Menu, Panel, PropertyGroup, AddonPreferences
 from bpy.props import IntProperty, StringProperty, BoolProperty,\
@@ -146,13 +146,22 @@ def update_history(new_path, old_path):
 # UTILITY FUNCTIONS
 #########################################################################################
 
-def resolve_module(path):
+def evaluate(path):
     """Returns Python Object from String Path"""
     try:
-        mod, dot, rest = path.partition('.')
-        # replace mod with 'mod' incase of illegal mod-name eg. - in 'API_Browser-main'
-        path = 'mod' + dot + rest
-        return  eval(path, {'mod': __import__(mod)})
+        parts = re.split('([^a-zA-Z0-9_-])', path.strip(), 1) # '-' for 'API_Browser-main'
+        if parts[0] in dir(builtins):
+            namespace = {}
+        else:
+            try:
+                # replace parts[0] with 'mod' incase of illegal mod-name
+                # eg. '-' in 'API_Browser-main'
+                namespace = {'mod': __import__(parts[0])}
+                parts[0] = 'mod'
+            except:
+                namespace = {}
+        
+        return  eval("".join(parts), namespace)
     except Exception as e:
         return e
 
@@ -187,7 +196,7 @@ def resolve_path(path, info):
 
 
 def get_module_description(path):
-    module = resolve_module(path)
+    module = evaluate(path)
     desc = str(module)
 
     if module.__doc__:
@@ -281,7 +290,7 @@ def categorize_module(path):
     if not path:
         return global_categories()
 
-    module = resolve_module(path)
+    module = evaluate(path)
 
     return object_categories(module)
 
@@ -474,7 +483,7 @@ class API_OT_Module_Info(Operator):
 
     def invoke(self, context, event):
         path = get_props().path
-        self.module = resolve_module(path)
+        self.module = evaluate(path)
         return context.window_manager.invoke_popup(self, width=600)
 
     def draw(self, context):
