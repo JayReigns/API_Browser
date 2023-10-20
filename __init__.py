@@ -150,8 +150,8 @@ def resolve_module(path):
         # replace mod with 'mod' incase of illegal mod-name eg. - in 'API_Browser-main'
         path = 'mod' + dot + rest
         return  eval(path, {'mod': __import__(mod)})
-    except:
-        return None
+    except Exception as e:
+        return e
 
 
 def parent(path):
