@@ -269,10 +269,11 @@ class API_MT_History_Menu(Menu):
         history = api_props.history
         layout = self.layout
 
-        layout.operator(API_OT_History_Clear.bl_idname, text="Clear", icon="CANCEL")
         for i in range(len(history) - 1, -1, -1):
             item = history[i]
             layout.operator(API_OT_History.bl_idname, text=item.path).index = i
+        layout.separator()
+        layout.operator(API_OT_History_Clear.bl_idname, text="Clear", icon="CANCEL")
 
 
 class API_OT_History(Operator, Menu):
