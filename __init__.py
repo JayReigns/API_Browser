@@ -9,6 +9,7 @@ bl_info = {
     "category": "Development"
 }
 
+import builtins
 import bpy
 from bpy.types import Operator, Menu, Panel, PropertyGroup, AddonPreferences
 from bpy.props import IntProperty, StringProperty, BoolProperty,\
@@ -195,50 +196,93 @@ def get_module_description(path):
     return desc
 
 
-def categorize_module(path):
+def isiterable(mod):
+    try:
+        # (str, byte) can be passed but bpy.app gets ignored
+        return iter(mod) and not isinstance(mod, str)
+    except:
+        return False
 
-    def isiterable(mod):
+
+# following functions are taken from rlcompleter.py and modified
+
+def get_class_members(klass):
+    ret = dir(klass)
+    if hasattr(klass,'__bases__'):
+        for base in klass.__bases__:
+            ret = ret + get_class_members(base)
+    return ret
+
+
+def object_categories(obj):
+    
+    itm, val, mod, typ, props, struct, met, att, bug = [], [], [], [], [], [], [], [], []
+
+    if isiterable(obj):
+        if hasattr(obj, 'keys') \
+            and len(obj) == len(obj.keys()): # special check for <class 'bpy_prop_collection'>
+            itm = [str(k) for k in obj.keys()]
+        else:
+            val = [str(v) for v in obj]
+
+    words = set(dir(obj))
+    if hasattr(obj, '__class__'):
+        words.add('__class__')
+        words.update(get_class_members(obj.__class__))
+    
+    for word in sorted(words):
         try:
-            # (str, byte) can be passed but bpy.app gets ignored
-            return iter(mod) and not isinstance(mod, str)
+            styp = str(type(getattr(obj, word)))
         except:
-            return False
+            bug.append( word )
+            continue
 
-    if not path:
-        return [], [], get_root_modules(), [], [], [], [], [], []
+        if styp == "<class 'module'>":
+            mod.append( word )
+        elif styp.startswith("<class 'bpy_prop"):
+            props.append( word )
+        elif styp.startswith("<class 'bpy"):
+            struct.append( word )
+        elif styp == "<class 'builtin_function_or_method'>":
+            met.append( word )
+        elif styp == "<class 'type'>":
+            typ.append( word )
+        else:
+            att.append( word )
+
+    return itm, val, mod, typ, props, struct, met, att, bug
+    
+
+def global_categories():
 
     itm, val, mod, typ, props, struct, met, att, bug = [], [], [], [], [], [], [], [], []
+    mod += get_root_modules()
+
+    for word, value in builtins.__dict__.items():
+        try:
+            styp = str(type(value))
+        except:
+            bug.append( word )
+            continue
+
+        if styp == "<class 'type'>":
+            typ.append( word )
+        elif styp == "<class 'builtin_function_or_method'>":
+            met.append( word )
+        else:
+            att.append( word )
+    
+    return itm, val, mod, typ, props, struct, met, att, bug
+
+
+def categorize_module(path):
+    
+    if not path:
+        return global_categories()
 
     module = resolve_module(path)
 
-    if isiterable(module):
-        if hasattr(module, 'keys') \
-            and len(module) == len(module.keys()): # special check for <class 'bpy_prop_collection'>
-            itm = [str(k) for k in module.keys()]
-        else:
-            val = [str(v) for v in module]
-
-    for i in dir(module):
-        try:
-            t = str(type(getattr(module, i)))
-        except:
-            bug.append( i )
-            continue
-
-        if t == "<class 'module'>":
-            mod.append( i )
-        elif t.startswith("<class 'bpy_prop"):
-            props.append( i )
-        elif t.startswith("<class 'bpy"):
-            struct.append( i )
-        elif t == "<class 'builtin_function_or_method'>":
-            met.append( i )
-        elif t == "<class 'type'>":
-            typ.append( i )
-        else:
-            att.append( i )
-
-    return itm, val, mod, typ, props, struct, met, att, bug
+    return object_categories(module)
 
 
 #########################################################################################
