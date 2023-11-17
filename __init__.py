@@ -175,7 +175,7 @@ def parent(path):
 def resolve_path(path, info):
     """Returns Submodule path from info=(cat, idx, word) tuple"""
 
-    cat, idx, word = info.split()
+    cat, idx, word = info.split(" ", maxsplit=2)
     cat = int(cat)
 
     if cat == 0:  # key
